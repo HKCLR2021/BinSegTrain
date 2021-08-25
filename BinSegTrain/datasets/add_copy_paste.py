@@ -35,7 +35,7 @@ def get_args():
     parser.add_argument('--bottom', type=float, default=0.8)
     parser.add_argument('--max_tem', type=int, default=80, help='maximum number of templates on a background')
     parser.add_argument('--min_tem', type=int, default=20, help='minimum number of templates on a background')
-    parser.add_argument('--gen_num_per_base', type=int, default=2, help='maximum number of templates on a background')
+    parser.add_argument('--gen_num_per_base', type=int, default=2, help='generate how many images for each background image. total number of iamges will be num_bg*gen_nem_per_base')
     parser.add_argument("--oc", type=float, default=0.88, help='threshold of visibility')
     return parser.parse_args()
 
