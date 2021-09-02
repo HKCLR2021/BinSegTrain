@@ -2,7 +2,7 @@ INPUT:
   MASK_FORMAT: "bitmask"
   FORMAT: "RGB"
   RANDOM_FLIP: "horizontal"
-OUTPUT_DIR: "./outfiles/01"   # need modification
+OUTPUT_DIR: "./outfiles/08"   # need modification
 SOLVER:
   IMS_PER_BATCH: 2
   BASE_LR: 0.005

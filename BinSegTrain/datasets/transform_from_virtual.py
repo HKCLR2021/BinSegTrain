@@ -32,6 +32,8 @@ def get_args():
     parser.add_argument("--data_type", type=str, default="gray", help='rgb or gray')
     parser.add_argument("--obj_idx", type=str, default="01")
     parser.add_argument("--virtual_dir", type=str, default='../example_virtual_data_output/', help='source path of virtual data, such as /research/d3/bqyang/yidan/dataset_output')
+    parser.add_argument("--output_dir", type=str, default=None, help='output dir of converted data')
+    parser.add_argument("--log_dir", type=str, default=None, help='output dir of converted data')
     parser.add_argument("--obj_path", type=str, default='./part01.obj', help='path of CAD model in .obj format')
     parser.add_argument("--phase", type=str, default='train')
     parser.add_argument("--oc", type=float, default=0.8, help='threshold for visibility (occlusion), only objects with oc > x will be labelled')
@@ -85,8 +87,13 @@ if __name__ == "__main__":
     model_pc = obj_mesh.sample_points_uniformly(number_of_points=200000)
     inst_model_pc = np.asarray(model_pc.points)
 
-    data_dir = os.path.join(args.virtual_dir, args.obj_idx, 'hard', '0000')  # need to be modified according to the detailed output path defined by caorui
+    data_dir = args.virtual_dir
     output_dir = "./" + args.obj_idx
+    if args.output_dir is not None: output_dir = args.output_dir
+
+    log_dir = output_dir + "/log"
+    if args.log_dir is not None: log_dir = args.log_dir
+    os.makedirs(log_dir, exist_ok=True)
 
     idx = 0
     dataset_dicts = []
@@ -97,6 +104,7 @@ if __name__ == "__main__":
     h5_dir = os.path.join(data_dir, "compressed/")
     meta_dir = os.path.join(data_dir, "meta/")
 
+    imgs_to_process = len(os.listdir(h5_dir))
     bar = progressbar
     for name in bar.progressbar(os.listdir(h5_dir)):
         record = {}
@@ -137,12 +145,14 @@ if __name__ == "__main__":
         record["annotations"] = objs
         fname = str(idx) + '.png'
         cv2.imwrite(os.path.join(output_dir,'train', fname), output)
-        record['file_name'] = os.path.join(os.getcwd(), args.obj_idx, args.phase, fname)
+        record['file_name'] = os.path.join(output_dir, args.phase, fname)
         record['image_id'] = idx
         record['height'] = height
         record['width'] = width
         dataset_dicts.append(record)
         idx += 1
+        with open(log_dir + "/progress.txt", "a") as f:
+            print(f"Converted imgs to training format : {idx}/{imgs_to_process}")
     with open(os.path.join(output_dir, 'json', args.phase + '.json'), 'w') as f:
         json.dump(dataset_dicts, f)
         print("json file: %s accomplished!" % args.phase)
