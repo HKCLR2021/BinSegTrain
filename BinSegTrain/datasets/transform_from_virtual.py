@@ -138,7 +138,11 @@ if __name__ == "__main__":
             inst_model_array = np.add(np.dot(inst_model_pc, inst_r.T), inst_t)
             inst_full_mask = object_back_projection(intrinsics, inst_model_array, bit_label.shape) # complete instance mask
 
-            visibility = np.sum(inst_mask) / np.sum(inst_full_mask)
+            if np.sum(inst_full_mask)<=0:
+                visibility = 0.
+            else:
+                visibility = np.sum(inst_mask) / np.sum(inst_full_mask)
+                
             if visibility > args.oc:
                 objs.append(get_rotated_obj(inst_mask))
 
