@@ -69,6 +69,9 @@ def argument_parser():
         default=None,
         nargs=argparse.REMAINDER,
     )
+
+    parser.add_argument("--debug", action="store_true")
+
     return parser
 
 def random_range_noise(img, mode='pepper', range=(0.0, 0.1)):
@@ -159,15 +162,23 @@ def main(args):
 
 if __name__ == '__main__':
     args = argument_parser().parse_args()
-    main(args)
-    # launch(
-    #     main(args),
-    #     args.num_gpus,
-    #     num_machines=args.num_machines,
-    #     machine_rank=args.machine_rank,
-    #     dist_url=args.dist_url,
-    #     args=(args,),
-    # )
+
+    if args.debug:
+        import debugpy
+        print("wait for debugger to attach to port 5678")
+        debugpy.listen(5678)
+        debugpy.wait_for_client()  # blocks execution until client is attached
+
+
+    # main(args)
+    launch(
+        main,
+        args.num_gpus,
+        num_machines=args.num_machines,
+        machine_rank=args.machine_rank,
+        dist_url=args.dist_url,
+        args=(args,),
+    )
 
 
 
