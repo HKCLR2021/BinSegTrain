@@ -38,3 +38,8 @@ for example:
 ```bash
 python train-rmRCNN.py --data_dir './datasets/01' --user_config_file "./configs/user_rmRCNN.yaml" 
 ````
+## Additional support on robust (part-aware) segmentation
+### Introduction
+- all additional functions in tools.
+- a judging global varible: IS_LOW in tools.py, it is used in train, test, and data transform
+- we identify 'low-solidity' objects and provide special treat to enable robust segmentation, where 'solidy' is defined as 
