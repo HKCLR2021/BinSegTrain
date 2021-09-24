@@ -21,7 +21,12 @@ verify_results,
 DatasetEvaluators
 )
 import matplotlib.pyplot as plt
-from rotated_maskrcnn import DatasetMapper
+###
+if tools.IS_LOW:
+    from part_aware_rot_maskrcnn import DatasetMapper
+else:
+    from rotated_maskrcnn import DatasetMapper
+###
 from config import add_rmRCNN_config
 
 def argument_parser():
