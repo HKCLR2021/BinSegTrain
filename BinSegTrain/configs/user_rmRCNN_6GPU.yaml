@@ -44,8 +44,9 @@ MODEL:
   MASK_ON: true
   WEIGHTS: ''
 DATASETS:
-  TEST:
-  - test
+  #TEST:
+  #- test
+  TEST: [] # no real data thus skip training
   TRAIN:
   - train
 
