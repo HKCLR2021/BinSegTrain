@@ -18,8 +18,14 @@ from config import add_rmRCNN_config
 import matplotlib.pyplot as plt
 import tools
 import math
-if tools.IS_LOW:
+##
+import low_solidity_support as loso
+if loso.IS_LOW:
     import part_aware_rot_maskrcnn
+else:
+    import rotated_maskrcnn
+##
+
 
 
 def argument_parser():
@@ -56,11 +62,14 @@ def segment_image(model, img, seg_candidate_mask_num=None):
     input_tensor = torch.as_tensor(img.astype("float32").transpose(2, 0, 1))
     inputs = {"image": input_tensor, "height": height, "width": width}
     outputs = model([inputs])[0]
-    if tools.IS_LOW:
-        pred_masks = tools.aggregate(outputs, img)
+    
+    ##
+    if loso.IS_LOW:
+        pred_masks = loso.aggregate(outputs, img)
     else:
         pred_masks = outputs['instances'].get('pred_masks').detach().cpu().numpy()
-
+    ##
+    
     if seg_candidate_mask_num is None: return pred_masks
 
     mask_sizes = []
