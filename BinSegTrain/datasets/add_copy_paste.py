@@ -22,7 +22,9 @@ import matplotlib.pyplot as plt
 from transform_from_virtual import get_rotated_obj
 import glob
 import progressbar
-dataset = '01'
+##
+import low_solidity_support as loso
+##
 
 
 def get_args():
@@ -137,9 +139,14 @@ def copy_pasteN_per_base(b,dataset_dicts,args):
         for label_id, tem_mask in tem_addrs.items():
             inst_full_mask = tem_mask
             inst_mask = (base_label[:,:,0]==label_id)
-            visibility = np.sum(inst_mask) / np.sum(inst_full_mask)
-            if visibility > args.oc:
-                objs.append(get_rotated_obj(inst_mask))
+            ##
+            if not loso.IS_LOW:
+                visibility = np.sum(inst_mask) / np.sum(inst_full_mask)
+                if visibility > args.oc:
+                    objs.append(get_rotated_obj(inst_mask))
+            else:
+                loso.add_part_obj(inst_mask, inst_full_mask, objs)
+            ##
 
         record["annotations"] = objs
         fname = b.split('.')[0] + '_' + str(i)+'.png'
