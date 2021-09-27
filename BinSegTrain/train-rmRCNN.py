@@ -21,13 +21,17 @@ verify_results,
 DatasetEvaluators
 )
 import matplotlib.pyplot as plt
-###
-if tools.IS_LOW:
+from config import add_rmRCNN_config 
+
+##
+import low_solidity_support as loso
+if loso.IS_LOW:
     from part_aware_rot_maskrcnn import DatasetMapper
 else:
     from rotated_maskrcnn import DatasetMapper
-###
-from config import add_rmRCNN_config
+
+##
+
 
 def argument_parser():
     """
