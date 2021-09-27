@@ -21,6 +21,9 @@ import pickle
 import open3d as o3d
 import progressbar
 
+##
+import low_solidity_support as loso
+##
 
 
 """
@@ -137,14 +140,19 @@ if __name__ == "__main__":
             inst_t = np.array([meta['poses'][:, :, obj_idx][:, 3:4].flatten()])
             inst_model_array = np.add(np.dot(inst_model_pc, inst_r.T), inst_t)
             inst_full_mask = object_back_projection(intrinsics, inst_model_array, bit_label.shape) # complete instance mask
-
-            if np.sum(inst_full_mask)<=0:
-                visibility = 0.
-            else:
-                visibility = np.sum(inst_mask) / np.sum(inst_full_mask)
+            
+            ##
+            if not loso.IS_LOW:
+                if np.sum(inst_full_mask)<=0:
+                    visibility = 0.
+                else:
+                    visibility = np.sum(inst_mask) / np.sum(inst_full_mask)
                 
-            if visibility > args.oc:
-                objs.append(get_rotated_obj(inst_mask))
+                if visibility > args.oc:
+                    objs.append(get_rotated_obj(inst_mask))
+            else:
+                loso.add_part_obj(inst_mask, inst_full_mask, objs)
+            ##
 
         record["annotations"] = objs
         fname = str(idx) + '.png'
