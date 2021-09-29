@@ -53,7 +53,9 @@ def is_low_solidity(obj_path='datasets/part01.obj', data_dir='example_virtual_da
         sol = fg_area/bg_area
         solidities.append(sol)
     solidity = np.min(solidities)
-    return True if solidity < 0.3 else False
+    print(f"{obj_path} solidity : {solidity}")
+    #return True if solidity < 0.3 else False
+    return True if solidity < 0.35 else False
 
 def object_back_projection(intrinsics, pc_selected):
     """
@@ -382,7 +384,8 @@ def aggregate(outputs, img):
     return np.array(collected_masks)
 
 ##
-IS_LOW = is_low_solidity(allow=True, obj_path='/home/dan/Desktop/BinSegTrain/datasets/part10.obj', data_dir='/home/dan/Desktop/BinSegTrain/example_virtual_data_output/10/simple/0000')
+#IS_LOW = is_low_solidity(allow=True, obj_path='/home/dan/Desktop/BinSegTrain/datasets/part10.obj', data_dir='/home/dan/Desktop/BinSegTrain/example_virtual_data_output/10/simple/0000')
+IS_LOW = False # default to not use loso
 ##
 
 

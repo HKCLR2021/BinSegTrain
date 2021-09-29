@@ -20,7 +20,7 @@ import glob
 import pickle
 import open3d as o3d
 import progressbar
-
+import yaml
 ##
 import low_solidity_support as loso
 ##
@@ -85,6 +85,10 @@ def get_rotated_obj(bitmask):
 
 if __name__ == "__main__":
     args = get_args()
+
+    loso.IS_LOW = loso.is_low_solidity(obj_path=args.obj_path, data_dir=args.virtual_dir, allow=True)
+    print(f"loso flag: {loso.IS_LOW}")
+
     # get instance point cloud to compute visibility for each object in the scene
     obj_mesh = o3d.io.read_triangle_mesh(args.obj_path)
     model_pc = obj_mesh.sample_points_uniformly(number_of_points=200000)
@@ -142,16 +146,16 @@ if __name__ == "__main__":
             inst_full_mask = object_back_projection(intrinsics, inst_model_array, bit_label.shape) # complete instance mask
             
             ##
-            if not loso.IS_LOW:
-                if np.sum(inst_full_mask)<=0:
-                    visibility = 0.
-                else:
-                    visibility = np.sum(inst_mask) / np.sum(inst_full_mask)
-                
-                if visibility > args.oc:
-                    objs.append(get_rotated_obj(inst_mask))
+            if np.sum(inst_full_mask)<=0:
+                visibility = 0.
             else:
-                loso.add_part_obj(inst_mask, inst_full_mask, objs)
+                visibility = np.sum(inst_mask) / np.sum(inst_full_mask)
+            
+            if visibility > args.oc:
+                if loso.IS_LOW:
+                    loso.add_part_obj(inst_mask, inst_full_mask, objs)
+                else:
+                    objs.append(get_rotated_obj(inst_mask))
             ##
 
         record["annotations"] = objs
@@ -165,6 +169,13 @@ if __name__ == "__main__":
         idx += 1
         with open(log_dir + "/progress.txt", "a") as f:
             print(f"Converted imgs to training format : {idx}/{imgs_to_process}")
+    
+    
+    with open(os.path.join(output_dir, 'json', 'info.yaml'), 'w') as f:
+        yaml.dump({
+            "use_loso": loso.IS_LOW
+        }, f)
+
     with open(os.path.join(output_dir, 'json', args.phase + '.json'), 'w') as f:
         json.dump(dataset_dicts, f)
         print("json file: %s accomplished!" % args.phase)

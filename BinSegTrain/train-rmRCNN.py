@@ -13,6 +13,7 @@ from detectron2.config import get_cfg
 from detectron2.data import DatasetCatalog, MetadataCatalog, build_detection_train_loader
 from detectron2.data import transforms as T
 from detectron2.engine import DefaultTrainer, default_setup, hooks, launch,HookBase
+from detectron2.engine.hooks import PeriodicCheckpointer
 from detectron2 import model_zoo
 from skimage.util import random_noise
 from detectron2.evaluation import (
@@ -25,11 +26,6 @@ from config import add_rmRCNN_config
 
 ##
 import low_solidity_support as loso
-if loso.IS_LOW:
-    from part_aware_rot_maskrcnn import DatasetMapper
-else:
-    from rotated_maskrcnn import DatasetMapper
-
 ##
 
 
@@ -115,6 +111,17 @@ class RandomResize(T.Augmentation):
         return T.ResizeTransform(
             input_size[0], input_size[1], scaled_size[0], scaled_size[1], self.interp
         )
+
+class MyCheckpointer(PeriodicCheckpointer):
+    """
+    A custom hook that save extra meta data to the .pth checkpoint file
+    """
+    def after_step(self):
+        custom_info = {
+        "use_loso" : loso.IS_LOW
+        }
+        self.step(self.trainer.iter, **custom_info)
+
 class Trainer(DefaultTrainer):
     def build_train_loader(cls, cfg):
         return build_detection_train_loader(cfg, mapper=DatasetMapper(cfg, is_train=True, augmentations=[
@@ -127,7 +134,21 @@ class Trainer(DefaultTrainer):
                 # T.RandomCrop('relative_range',(0.3,0.3)),
                 # T.RandomExtent(scale_range=(0.3, 1), shift_range=(1, 1))
 
-   ]))
+    ]))
+
+    def build_hooks(self):
+        hooks = super().build_hooks()
+        targetIdx = -1
+        for idx,hook in enumerate(hooks): 
+            if isinstance(hook, PeriodicCheckpointer):
+                targetIdx = idx
+
+        if targetIdx>=0:
+            print("replace with custom checkpointer")
+            hooks.pop(targetIdx)
+            hooks.append(MyCheckpointer(self.checkpointer, self.cfg.SOLVER.CHECKPOINT_PERIOD))
+        return hooks
+
 
 def setup(args):
     """
@@ -155,6 +176,22 @@ def register_dataset(cfg, data_dir):  # datadir must be dataset_large
     DatasetCatalog.register(cfg.DATASETS.TRAIN[0],
                             lambda: get_box_dicts(os.path.join(data_dir,'json','train.json')))
     MetadataCatalog.get(cfg.DATASETS.TRAIN[0]).set(thing_classes=["box"])
+
+    info = os.path.join(data_dir,'json','info.yaml')
+    if os.path.exists(info):
+        import yaml
+        with open(info, "r") as f: 
+            info = yaml.load(f, Loader=yaml.FullLoader)
+            loso.IS_LOW = info.get("use_loso", False)
+    print (f"use_loso : {loso.IS_LOW}")
+
+    global DatasetMapper
+    if loso.IS_LOW:
+        from part_aware_rot_maskrcnn import DatasetMapper
+    else:
+        from rotated_maskrcnn import DatasetMapper
+
+
 
     # DatasetCatalog.register(cfg.DATASETS.TEST[0],
     #                         lambda: get_box_dicts(os.path.join(data_dir,'json','val.json')))
