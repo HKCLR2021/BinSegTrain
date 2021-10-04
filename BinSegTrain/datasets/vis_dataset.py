@@ -19,10 +19,13 @@ def get_dicts(json_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--phase', default='train')
-    parser.add_argument('--name', default='10')
+    parser.add_argument('--json_path', help="json file of the train dataset", default="/home/smartgrasping/Roy/TrainPipeLine6D/workspace/test_loso/train_seg/input/json/train.json")
+    parser.add_argument('--loso', help="enable loso mode", action='store_true')
     args = parser.parse_args()
-    json_path = os.path.join(args.name,'json', args.phase+'.json')
+    
+    json_path = args.json_path
+    loso.IS_LOW = args.loso
+    
     dicts = get_dicts(json_path)
     DatasetCatalog.register('screw', lambda : dicts)
     MetadataCatalog.get('screw').set(thing_classes=["object"])
