@@ -39,34 +39,59 @@ def get_args():
     parser.add_argument("--log_dir", type=str, default=None, help='output dir of converted data')
     parser.add_argument("--obj_path", type=str, default='./part01.obj', help='path of CAD model in .obj format')
     parser.add_argument("--phase", type=str, default='train')
-    parser.add_argument("--oc", type=float, default=0.8, help='threshold for visibility (occlusion), only objects with oc > x will be labelled')
+    parser.add_argument("--oc", type=float, default=0.5, help='threshold for visibility (occlusion), only objects with oc > x will be labelled')
     return parser.parse_args()
 
-def object_back_projection(intrinsics, pc_selected, img_shape):
-    """
-    map the point cloud onto a 2D scene
+# def object_back_projection(intrinsics, pc_selected, img_shape):
+#     """
+#     map the point cloud onto a 2D scene
 
-    args:
-    pc_selected: sampled point cloud from object CAD model, already translated by pose
+#     args:
+#     pc_selected: sampled point cloud from object CAD model, already translated by pose
+#     img_shape:   shape of the 2D scene
+
+#     return:
+#     object mask without occlusion
+#     """
+#     h, w = img_shape
+#     obj_mask = np.zeros((h, w), dtype=bool)
+#     pc_non_zero = pc_selected[np.where(np.all(pc_selected[:, :] != [0.0, 0.0, 0.0], axis=-1) == True)[0]]
+#     fx, fy = intrinsics[0, 0], intrinsics[1, 1]
+#     cx, cy = intrinsics[0, 2], intrinsics[1, 2]
+#     # depth = pc_non_zero[:, 2]  # point_z
+#     coords_x = (pc_non_zero[:, 0] / pc_non_zero[:, 2] * fx + cx).astype(np.uint16)
+#     coords_y = (pc_non_zero[:, 1] / pc_non_zero[:, 2] * fy + cy).astype(np.uint16)
+#     # check index range:
+#     new_x = np.delete(coords_x, coords_x>=w)
+#     new_y = np.delete(coords_y, coords_x>=w)
+#     new_x = np.delete(new_x, new_y>=h)
+#     new_y = np.delete(new_y, new_y>=h)
+#     obj_mask[new_y, new_x] = True
+#     return obj_mask
+
+
+def object_back_projection(intrinsics, pc_selected, img_shape):    
+    """    map the point cloud onto a 2D scene
+    args:    pc_selected: sampled point cloud from object CAD model, already translated by pose    
     img_shape:   shape of the 2D scene
-
-    return:
-    object mask without occlusion
-    """
-    h, w = img_shape
-    obj_mask = np.zeros((h, w), dtype=bool)
-    pc_non_zero = pc_selected[np.where(np.all(pc_selected[:, :] != [0.0, 0.0, 0.0], axis=-1) == True)[0]]
-    fx, fy = intrinsics[0, 0], intrinsics[1, 1]
-    cx, cy = intrinsics[0, 2], intrinsics[1, 2]
-    # depth = pc_non_zero[:, 2]  # point_z
-    coords_x = (pc_non_zero[:, 0] / pc_non_zero[:, 2] * fx + cx).astype(np.uint16)
-    coords_y = (pc_non_zero[:, 1] / pc_non_zero[:, 2] * fy + cy).astype(np.uint16)
-    # check index range:
-    new_x = np.delete(coords_x, coords_x>=w)
-    new_y = np.delete(coords_y, coords_x>=w)
-    new_x = np.delete(new_x, new_y>=h)
-    new_y = np.delete(new_y, new_y>=h)
-    obj_mask[new_y, new_x] = True
+    return:    object mask without occlusion    """    
+    h, w = img_shape    
+    obj_mask = np.zeros((h+400, w+400), dtype=bool)    
+    pc_non_zero = pc_selected[np.where(np.all(pc_selected[:, :] != [0.0, 0.0, 0.0], axis=-1) == True)[0]]    
+    fx, fy = intrinsics[0, 0], intrinsics[1, 1]    
+    cx, cy = intrinsics[0, 2], intrinsics[1, 2]    
+    # depth = pc_non_zero[:, 2]  # point_z    
+    coords_x = (pc_non_zero[:, 0] / pc_non_zero[:, 2] * fx + cx).astype(np.int16)    
+    coords_y = (pc_non_zero[:, 1] / pc_non_zero[:, 2] * fy + cy).astype(np.int16)    
+    # # check index range:    
+    # new_x = np.delete(coords_x, coords_x>=w)    
+    # new_y = np.delete(coords_y, coords_x>=w)    
+    # new_x = np.delete(new_x, new_y>=h)    
+    # new_y = np.delete(new_y, new_y>=h)    
+    # obj_mask[new_y, new_x] = True    
+    coords_x = np.clip(coords_x, -200, w+200-1)
+    coords_y = np.clip(coords_y, -200, h+200-1)
+    obj_mask[coords_y+200, coords_x+200] = True
     return obj_mask
 
 
@@ -142,6 +167,8 @@ if __name__ == "__main__":
             inst_mask = ma.getmaskarray(ma.masked_equal(bit_label, obj_idx + 1)) # occluded instance mask
             inst_r = meta['poses'][:, :, obj_idx][:, 0:3]
             inst_t = np.array([meta['poses'][:, :, obj_idx][:, 3:4].flatten()])
+            if np.sum(inst_mask)<=0: continue
+            # print("inst_r_t", inst_r, inst_t)
             inst_model_array = np.add(np.dot(inst_model_pc, inst_r.T), inst_t)
             inst_full_mask = object_back_projection(intrinsics, inst_model_array, bit_label.shape) # complete instance mask
             
