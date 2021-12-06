@@ -71,10 +71,16 @@ def get_args():
 
 
 def object_back_projection(intrinsics, pc_selected, img_shape):    
-    """    map the point cloud onto a 2D scene
-    args:    pc_selected: sampled point cloud from object CAD model, already translated by pose    
+    """
+    map the point cloud onto a 2D scene
+    
+    args:
+    pc_selected: sampled point cloud from object CAD model, already translated by pose    
     img_shape:   shape of the 2D scene
-    return:    object mask without occlusion    """    
+
+    return:
+    object mask without occlusion    
+    """    
     h, w = img_shape    
     obj_mask = np.zeros((h+400, w+400), dtype=bool)    
     pc_non_zero = pc_selected[np.where(np.all(pc_selected[:, :] != [0.0, 0.0, 0.0], axis=-1) == True)[0]]    
