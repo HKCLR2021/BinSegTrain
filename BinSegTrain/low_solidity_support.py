@@ -25,66 +25,74 @@ import progressbar
 def is_low_solidity(obj_path='datasets/part01.obj', data_dir='example_virtual_data_output/01/hard/0000', allow=True):
     if not allow:
         return False
-    meta_dir = f'{data_dir}/meta'
-    meta_path = meta_dir+'/'+os.listdir(meta_dir)[0]
-    meta = scio.loadmat(meta_path)
-    intrinsics = meta['intrinsic_matrix_CameraLeft']
-    obj_mesh = o3d.io.read_triangle_mesh(obj_path)
-    model_pc = obj_mesh.sample_points_uniformly(number_of_points=200000)
-    inst_model_pc = np.asarray(model_pc.points)
-    solidities = []
-    kernel = np.ones((30, 30), np.uint8)
-    for id in range(len(meta['obj_idx'][0])):
-        inst_r = meta['poses'][:, :, id][:, 0:3]
-        inst_t = np.array([meta['poses'][:, :, id][:, 3:4].flatten()])
-        inst_model_array = np.add(np.dot(inst_model_pc, inst_r.T), inst_t)
-        inst_full_mask = object_back_projection(intrinsics, inst_model_array)
+    #meta_dir = f'{data_dir}/meta'
+    filename = os.listdir(data_dir)[0]
+    filename  =os.path.join(data_dir,filename)
+    
+    with h5py.File(filename, 'r') as file:
+        intrinsics = file['intrinsic_matrix_CameraLeft']
+        obj_mesh = o3d.io.read_triangle_mesh(obj_path)
+        model_pc = obj_mesh.sample_points_uniformly(number_of_points=200000)
+        inst_model_pc = np.asarray(model_pc.points)
+        solidities = []
+        kernel = np.ones((30, 30), np.uint8)
+        img = file['rgb'][:]
+        obj_idxes = file['obj_idx'][:]
+        obj_poses = file['pose'][:]            
+        for obj_idx, obj_pose in zip(obj_idxes, obj_poses):
+            inst_r = obj_pose[:, 0:3]
+            inst_t = obj_pose[:, 3:4].flatten()
+            inst_model_array = np.add(np.dot(inst_model_pc, inst_r.T), inst_t)
+            inst_full_mask = object_back_projection(intrinsics, inst_model_array, img.shape[0:2], side_margin=0)
 
-        dilated_mask = cv2.dilate(inst_full_mask.astype('uint8'), kernel, iterations=1)
-        eroded_mask = cv2.erode(dilated_mask, kernel, iterations=1)
+            dilated_mask = cv2.dilate(inst_full_mask.astype('uint8'), kernel, iterations=1)
+            eroded_mask = cv2.erode(dilated_mask, kernel, iterations=1)
 
-        y_idxs, x_idxs = np.where(inst_full_mask)
-        object_points = np.array([[x, y] for x, y in zip(x_idxs, y_idxs)])
-        if len(object_points) == 0:
-            continue
-        (c_x, c_y), (w, h), a = cv2.minAreaRect(object_points)
-        bg_area = w*h
-        fg_area = np.sum(eroded_mask)
-        sol = fg_area/bg_area
-        solidities.append(sol)
-    solidity = np.min(solidities)
-    print(f"{obj_path} solidity : {solidity}")
-    #return True if solidity < 0.3 else False
-    return True if solidity < 0.35 else False
+            y_idxs, x_idxs = np.where(inst_full_mask)
+            object_points = np.array([[x, y] for x, y in zip(x_idxs, y_idxs)])
+            if len(object_points) == 0:
+                continue
 
-def object_back_projection(intrinsics, pc_selected):
+            (c_x, c_y), (w, h), a = cv2.minAreaRect(object_points)
+            bg_area = w*h
+            fg_area = np.sum(eroded_mask)
+            sol = fg_area/bg_area
+            solidities.append(sol)
+        solidity = np.min(solidities)
+        print(f"{obj_path} solidity : {solidity}")
+        #return True if solidity < 0.3 else False
+        return True if solidity < 0.35 else False
+
+def object_back_projection(intrinsics, pc_selected, img_shape, side_margin=200):    
     """
     map the point cloud onto a 2D scene
-
+    
     args:
-    pc_selected: sampled point cloud from object CAD model, already translated by pose
+    pc_selected: sampled point cloud from object CAD model, already translated by pose    
     img_shape:   shape of the 2D scene
+    side_margin: margin around the img, to occomodate objs that are partially out of the img frame
 
     return:
-    object mask without occlusion
-    """
-    h = 1080
-    w = 1920
-    obj_mask = np.zeros((h, w), dtype=bool)
-    pc_non_zero = pc_selected[np.where(np.all(pc_selected[:, :] != [0.0, 0.0, 0.0], axis=-1) == True)[0]]
-    fx, fy = intrinsics[0, 0], intrinsics[1, 1]
-    cx, cy = intrinsics[0, 2], intrinsics[1, 2]
-    # depth = pc_non_zero[:, 2]  # point_z
-    coords_x = (pc_non_zero[:, 0] / pc_non_zero[:, 2] * fx + cx).astype(np.uint16)
-    coords_y = (pc_non_zero[:, 1] / pc_non_zero[:, 2] * fy + cy).astype(np.uint16)
-    # check index range:
-    new_x = np.delete(coords_x, coords_x>=w)
-    new_y = np.delete(coords_y, coords_x>=w)
-    new_x = np.delete(new_x, new_y>=h)
-    new_y = np.delete(new_y, new_y>=h)
-    obj_mask[new_y, new_x] = True
+    object mask without occlusion    
+    """        
+    h, w = img_shape    
+    obj_mask = np.zeros((h+side_margin*2, w+side_margin*2), dtype=bool)    
+    pc_non_zero = pc_selected[np.where(np.all(pc_selected[:, :] != [0.0, 0.0, 0.0], axis=-1) == True)[0]]    
+    fx, fy = intrinsics[0, 0], intrinsics[1, 1]    
+    cx, cy = intrinsics[0, 2], intrinsics[1, 2]    
+    # depth = pc_non_zero[:, 2]  # point_z    
+    coords_x = (pc_non_zero[:, 0] / pc_non_zero[:, 2] * fx + cx).astype(np.int16)    
+    coords_y = (pc_non_zero[:, 1] / pc_non_zero[:, 2] * fy + cy).astype(np.int16)    
+    # # check index range:    
+    # new_x = np.delete(coords_x, coords_x>=w)    
+    # new_y = np.delete(coords_y, coords_x>=w)    
+    # new_x = np.delete(new_x, new_y>=h)    
+    # new_y = np.delete(new_y, new_y>=h)    
+    # obj_mask[new_y, new_x] = True    
+    coords_x = np.clip(coords_x, -side_margin, w+side_margin-1)
+    coords_y = np.clip(coords_y, -side_margin, h+side_margin-1)
+    obj_mask[coords_y+side_margin, coords_x+side_margin] = True
     return obj_mask
-
 
 
 

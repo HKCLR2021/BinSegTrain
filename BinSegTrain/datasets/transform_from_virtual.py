@@ -33,56 +33,29 @@ prepare input images and annotation dicts from the virtual data output for train
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_type", type=str, default="gray", help='rgb or gray')
-    parser.add_argument("--obj_idx", type=str, default="01")
+    # parser.add_argument("--obj_idx", type=str, default="01")
     parser.add_argument("--virtual_dir", type=str, default='../example_virtual_data_output/', help='source path of virtual data, such as /research/d3/bqyang/yidan/dataset_output')
-    parser.add_argument("--output_dir", type=str, default=None, help='output dir of converted data')
+    parser.add_argument("--output_dir", type=str, default="./output", help='output dir of converted data')
     parser.add_argument("--log_dir", type=str, default=None, help='output dir of converted data')
     parser.add_argument("--obj_path", type=str, default='./part01.obj', help='path of CAD model in .obj format')
     parser.add_argument("--phase", type=str, default='train')
     parser.add_argument("--oc", type=float, default=0.5, help='threshold for visibility (occlusion), only objects with oc > x will be labelled')
     return parser.parse_args()
 
-# def object_back_projection(intrinsics, pc_selected, img_shape):
-#     """
-#     map the point cloud onto a 2D scene
-
-#     args:
-#     pc_selected: sampled point cloud from object CAD model, already translated by pose
-#     img_shape:   shape of the 2D scene
-
-#     return:
-#     object mask without occlusion
-#     """
-#     h, w = img_shape
-#     obj_mask = np.zeros((h, w), dtype=bool)
-#     pc_non_zero = pc_selected[np.where(np.all(pc_selected[:, :] != [0.0, 0.0, 0.0], axis=-1) == True)[0]]
-#     fx, fy = intrinsics[0, 0], intrinsics[1, 1]
-#     cx, cy = intrinsics[0, 2], intrinsics[1, 2]
-#     # depth = pc_non_zero[:, 2]  # point_z
-#     coords_x = (pc_non_zero[:, 0] / pc_non_zero[:, 2] * fx + cx).astype(np.uint16)
-#     coords_y = (pc_non_zero[:, 1] / pc_non_zero[:, 2] * fy + cy).astype(np.uint16)
-#     # check index range:
-#     new_x = np.delete(coords_x, coords_x>=w)
-#     new_y = np.delete(coords_y, coords_x>=w)
-#     new_x = np.delete(new_x, new_y>=h)
-#     new_y = np.delete(new_y, new_y>=h)
-#     obj_mask[new_y, new_x] = True
-#     return obj_mask
-
-
-def object_back_projection(intrinsics, pc_selected, img_shape):    
+def object_back_projection(intrinsics, pc_selected, img_shape, side_margin=200):    
     """
     map the point cloud onto a 2D scene
     
     args:
     pc_selected: sampled point cloud from object CAD model, already translated by pose    
     img_shape:   shape of the 2D scene
+    side_margin: margin around the img, to occomodate objs that are partially out of the img frame
 
     return:
     object mask without occlusion    
-    """    
+    """        
     h, w = img_shape    
-    obj_mask = np.zeros((h+400, w+400), dtype=bool)    
+    obj_mask = np.zeros((h+side_margin*2, w+side_margin*2), dtype=bool)    
     pc_non_zero = pc_selected[np.where(np.all(pc_selected[:, :] != [0.0, 0.0, 0.0], axis=-1) == True)[0]]    
     fx, fy = intrinsics[0, 0], intrinsics[1, 1]    
     cx, cy = intrinsics[0, 2], intrinsics[1, 2]    
@@ -95,9 +68,9 @@ def object_back_projection(intrinsics, pc_selected, img_shape):
     # new_x = np.delete(new_x, new_y>=h)    
     # new_y = np.delete(new_y, new_y>=h)    
     # obj_mask[new_y, new_x] = True    
-    coords_x = np.clip(coords_x, -200, w+200-1)
-    coords_y = np.clip(coords_y, -200, h+200-1)
-    obj_mask[coords_y+200, coords_x+200] = True
+    coords_x = np.clip(coords_x, -side_margin, w+side_margin-1)
+    coords_y = np.clip(coords_y, -side_margin, h+side_margin-1)
+    obj_mask[coords_y+side_margin, coords_x+side_margin] = True
     return obj_mask
 
 
@@ -126,8 +99,9 @@ if __name__ == "__main__":
     inst_model_pc = np.asarray(model_pc.points)
 
     data_dir = args.virtual_dir
-    output_dir = "./" + args.obj_idx
-    if args.output_dir is not None: output_dir = args.output_dir
+
+    output_dir = args.output_dir
+    os.makedirs(output_dir, exist_ok=True)
 
     log_dir = output_dir + "/log"
     if args.log_dir is not None: log_dir = args.log_dir
@@ -139,70 +113,73 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(output_dir,'train'), exist_ok=True)  # for saving training 2D images
     os.makedirs(os.path.join(output_dir,'json'), exist_ok=True)  # for saving detectron2 format annotaions
 
-    h5_dir = os.path.join(data_dir, "compressed/")
-    meta_dir = os.path.join(data_dir, "meta/")
-
+    h5_dir = data_dir
     imgs_to_process = len(os.listdir(h5_dir))
     bar = progressbar
     for name in bar.progressbar(os.listdir(h5_dir)):
         record = {}
-        file = h5py.File(os.path.join(h5_dir, name), 'r')
-        if args.data_type == "rgb":
-            rgb = file['rgb'][:]
-            rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)
-            rgb = (rgb * 255.0)
-            rgb[rgb > 255] = 255
-            output = rgb
-        elif args.data_type == "gray":
-            rgb = file['rgb'][:]
-            gray = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
-            gray = (gray * 255.0)
-            gray[gray>255] = 255
-            output = gray
-        bit_label = file['label'][:]
-        file.close()
+        with h5py.File(os.path.join(h5_dir, name), 'r') as file:
 
-        height, width = output.shape
+            if args.data_type == "rgb":
+                rgb = file['rgb'][:]
+                rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)
+                rgb = (rgb * 255.0)
+                rgb[rgb > 255] = 255
+                output = rgb
+            elif args.data_type == "gray":
+                rgb = file['rgb'][:]
+                gray = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
+                gray = (gray * 255.0)
+                gray[gray>255] = 255
+                output = gray
 
-        meta = scio.loadmat(meta_dir + name.split('.')[0] + ".mat")
-        meta_name = meta['name']
-        intrinsics = meta['intrinsic_matrix_CameraLeft']
-        obj_list = range(len(meta['obj_idx'][0]))
-        objs = []
-        for obj_idx in obj_list:
-            inst_mask = ma.getmaskarray(ma.masked_equal(bit_label, obj_idx + 1)) # occluded instance mask
-            inst_r = meta['poses'][:, :, obj_idx][:, 0:3]
-            inst_t = np.array([meta['poses'][:, :, obj_idx][:, 3:4].flatten()])
-            if np.sum(inst_mask)<=0: continue
-            # print("inst_r_t", inst_r, inst_t)
-            inst_model_array = np.add(np.dot(inst_model_pc, inst_r.T), inst_t)
-            inst_full_mask = object_back_projection(intrinsics, inst_model_array, bit_label.shape) # complete instance mask
+            height, width = output.shape
+
             
-            ##
-            if np.sum(inst_full_mask)<=0:
-                visibility = 0.
-            else:
-                visibility = np.sum(inst_mask) / np.sum(inst_full_mask)
-            
-            if visibility > args.oc:
-                if loso.IS_LOW:
-                    loso.add_part_obj(inst_mask, inst_full_mask, objs)
-                else:
-                    objs.append(get_rotated_obj(inst_mask))
-            ##
+            bit_label = file['label'][:]            
+            intrinsics = file['intrinsic_matrix_CameraLeft'][:]
 
-        record["annotations"] = objs
-        fname = str(idx) + '.png'
-        cv2.imwrite(os.path.join(output_dir,'train', fname), output)
-        record['file_name'] = os.path.join(output_dir, args.phase, fname)
-        record['image_id'] = idx
-        record['height'] = height
-        record['width'] = width
-        dataset_dicts.append(record)
-        idx += 1
-        with open(log_dir + "/progress.txt", "a") as f:
-            print(f"Converted imgs to training format : {idx}/{imgs_to_process}")
-    
+            obj_names = file['name'][:]
+            obj_idxes = file['obj_idx'][:]
+            obj_poses = file['pose'][:]            
+            objs = []
+            for obj_name, obj_idx, obj_pose in zip(obj_names, obj_idxes, obj_poses):
+                inst_mask = ma.getmaskarray(ma.masked_equal(bit_label, obj_idx)) # occluded instance mask
+                area_occluded_mask = np.sum(inst_mask)
+                if area_occluded_mask<=0: continue
+
+                inst_r = obj_pose[:, 0:3]
+                inst_t = obj_pose[:, 3:4].flatten()
+                # print("inst_r_t", inst_r, inst_t)
+
+                inst_model_array = np.add(np.dot(inst_model_pc, inst_r.T), inst_t)
+                side_margin=200
+                inst_full_mask = object_back_projection(intrinsics, inst_model_array, bit_label.shape, side_margin) # complete instance mask 
+                area_full_mask = np.sum(inst_full_mask)
+                inst_full_mask = inst_full_mask[side_margin:-side_margin, side_margin:-side_margin]
+                
+                visibility = 0. if area_full_mask<=0. else area_occluded_mask / area_full_mask
+                # print("obj", obj_name, visibility)
+                if visibility > args.oc:
+                    if loso.IS_LOW:
+                        loso.add_part_obj(inst_mask, inst_full_mask, objs)
+                    else:
+                        objs.append(get_rotated_obj(inst_mask))                
+
+            fname = str(idx) + '.png'
+            cv2.imwrite(os.path.join(output_dir,'train', fname), output)
+            record["annotations"] = objs
+            record['file_name'] = os.path.join(output_dir, args.phase, fname)
+            record['image_id'] = idx
+            record['height'] = height
+            record['width'] = width
+            dataset_dicts.append(record)
+
+            idx += 1
+
+            with open(log_dir + "/progress.txt", "a") as f:
+                print(f"Converted imgs to training format : {idx}/{imgs_to_process}")
+        
     
     with open(os.path.join(output_dir, 'json', 'info.yaml'), 'w') as f:
         yaml.dump({
