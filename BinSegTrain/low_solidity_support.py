@@ -22,7 +22,7 @@ import open3d as o3d
 import progressbar
 
 
-def is_low_solidity(obj_path='datasets/part01.obj', data_dir='example_virtual_data_output/01/hard/0000', allow=True):
+def is_low_solidity(obj_path='datasets/part01.obj', data_dir='example_virtual_data_output/01/new_format', allow=True):
     if not allow:
         return False
     #meta_dir = f'{data_dir}/meta'
@@ -80,17 +80,21 @@ def object_back_projection(intrinsics, pc_selected, img_shape, side_margin=200):
     pc_non_zero = pc_selected[np.where(np.all(pc_selected[:, :] != [0.0, 0.0, 0.0], axis=-1) == True)[0]]    
     fx, fy = intrinsics[0, 0], intrinsics[1, 1]    
     cx, cy = intrinsics[0, 2], intrinsics[1, 2]    
-    # depth = pc_non_zero[:, 2]  # point_z    
+    
     coords_x = (pc_non_zero[:, 0] / pc_non_zero[:, 2] * fx + cx).astype(np.int16)    
     coords_y = (pc_non_zero[:, 1] / pc_non_zero[:, 2] * fy + cy).astype(np.int16)    
-    # # check index range:    
-    # new_x = np.delete(coords_x, coords_x>=w)    
-    # new_y = np.delete(coords_y, coords_x>=w)    
-    # new_x = np.delete(new_x, new_y>=h)    
-    # new_y = np.delete(new_y, new_y>=h)    
-    # obj_mask[new_y, new_x] = True    
-    coords_x = np.clip(coords_x, -side_margin, w+side_margin-1)
-    coords_y = np.clip(coords_y, -side_margin, h+side_margin-1)
+    
+    inrange = np.array([ 
+        coords_x > -side_margin,
+        coords_x < (w+side_margin-1), 
+        coords_y > -side_margin,
+        coords_y < (h+side_margin-1), 
+    ])
+    inrange = np.all(inrange, axis=0)
+
+    coords_x = coords_x[inrange]
+    coords_y = coords_y[inrange]
+
     obj_mask[coords_y+side_margin, coords_x+side_margin] = True
     return obj_mask
 

@@ -25,6 +25,7 @@ import yaml
 import low_solidity_support as loso
 ##
 
+from datetime import datetime
 
 """
 prepare input images and annotation dicts from the virtual data output for training segmentation network
@@ -92,7 +93,7 @@ if __name__ == "__main__":
 
     loso.IS_LOW = loso.is_low_solidity(obj_path=args.obj_path, data_dir=args.virtual_dir, allow=True)
     print(f"loso flag: {loso.IS_LOW}")
-
+    
     # get instance point cloud to compute visibility for each object in the scene
     obj_mesh = o3d.io.read_triangle_mesh(args.obj_path)
     model_pc = obj_mesh.sample_points_uniformly(number_of_points=200000)
@@ -143,29 +144,47 @@ if __name__ == "__main__":
             obj_idxes = file['obj_idx'][:]
             obj_poses = file['pose'][:]            
             objs = []
+
+            tot_time_ma = 0.0
+            tot_time_calvis = 0.0
+
+
             for obj_name, obj_idx, obj_pose in zip(obj_names, obj_idxes, obj_poses):
-                inst_mask = ma.getmaskarray(ma.masked_equal(bit_label, obj_idx)) # occluded instance mask
+                ta = datetime.now()
+                #inst_mask = ma.getmaskarray(ma.masked_equal(bit_label, obj_idx)) # occluded instance mask
+                #area_occluded_mask = np.sum(inst_mask)
+                inst_mask = bit_label==obj_idx
                 area_occluded_mask = np.sum(inst_mask)
                 if area_occluded_mask<=0: continue
+                tb = datetime.now()
+                tot_time_ma += (tb-ta).total_seconds()
 
                 inst_r = obj_pose[:, 0:3]
                 inst_t = obj_pose[:, 3:4].flatten()
                 # print("inst_r_t", inst_r, inst_t)
 
+                t1 = datetime.now()
                 inst_model_array = np.add(np.dot(inst_model_pc, inst_r.T), inst_t)
                 side_margin=200
                 inst_full_mask = object_back_projection(intrinsics, inst_model_array, bit_label.shape, side_margin) # complete instance mask 
                 area_full_mask = np.sum(inst_full_mask)
                 inst_full_mask = inst_full_mask[side_margin:-side_margin, side_margin:-side_margin]
+                t2 = datetime.now()
                 
                 visibility = 0. if area_full_mask<=0. else area_occluded_mask / area_full_mask
-                # print("obj", obj_name, visibility)
+                print("obj", obj_name, visibility, "timeused", (t2-t1).total_seconds())
+                tot_time_calvis += (t2-t1).total_seconds()
+
                 if visibility > args.oc:
                     if loso.IS_LOW:
+                        t1 = datetime.now()
                         loso.add_part_obj(inst_mask, inst_full_mask, objs)
+                        t2 = datetime.now()
+                        print("loso combine timeused", (t2-t1).total_seconds())
                     else:
                         objs.append(get_rotated_obj(inst_mask))                
-
+            print(tot_time_ma)
+            print(tot_time_calvis)
             fname = str(idx) + '.png'
             cv2.imwrite(os.path.join(output_dir,'train', fname), output)
             record["annotations"] = objs
